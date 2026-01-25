@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>필짐 공릉점 관리자</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 30px; background-color: #f4f4f9; color: #333; }
+        h2 { margin-bottom: 40px; }
+        .btn-group { display: flex; flex-direction: column; gap: 20px; align-items: center; }
+        
+        button { 
+            width: 80%; max-width: 300px; padding: 25px; font-size: 20px; font-weight: bold;
+            border: none; border-radius: 15px; cursor: pointer; transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+
+        .btn-low { background-color: #28a745; color: white; }
+        .btn-mid { background-color: #ffc107; color: #333; }
+        .btn-high { background-color: #dc3545; color: white; }
+        
+        #result-screen { display: none; margin-top: 50px; }
+        .success-icon { font-size: 50px; color: #28a745; margin-bottom: 20px; }
+        .reset-btn { margin-top: 30px; background: none; border: 1px solid #aaa; color: #666; font-size: 14px; padding: 10px; width: auto; }
+    </style>
+</head>
+<body>
+    <div id="main-screen">
+        <h2>🏋️ 현재 필짐 혼잡도는?</h2>
+        <div class="btn-group">
+            <button class="btn-low" onclick="sendCount(10)">🍀 여유로워요</button>
+            <button class="btn-mid" onclick="sendCount(25)">🙂 보통이에요</button>
+            <button class="btn-high" onclick="sendCount(40)">🔥 붐비네요</button>
+        </div>
+    </div>
+
+    <div id="result-screen">
+        <div class="success-icon">✅</div>
+        <h2 id="status-text">저장 완료되었습니다!</h2>
+        <p id="time-text" style="color: #888;"></p>
+        <button class="reset-btn" onclick="showMain()">다시 입력하기</button>
+    </div>
+
+    <script>
+    async function sendCount(countValue) {
+        try {
+            const response = await fetch(`http://127.0.0.1:8000/update?count=${countValue}`);
+            const data = await response.json();
+            
+            // 화면 전환
+            document.getElementById('main-screen').style.display = 'none';
+            document.getElementById('result-screen').style.display = 'block';
+            
+            // [수정 포인트] 서버에서 '상태' 대신 다른 이름으로 올 수도 있으니 
+            // 아예 고정 문구로 깔끔하게 나오게 변경합니다.
+            document.getElementById('status-text').innerText = "필짐 공릉점 혼잡도 저장 완료!";
+            document.getElementById('time-text').innerText = data.시간 + " 기준";
+        } catch (error) {
+            alert("서버 연결에 실패했습니다.");
+        }
+    }
+
+    function showMain() {
+        document.getElementById('main-screen').style.display = 'block';
+        document.getElementById('result-screen').style.display = 'none';
+    }
+</script>
+</body>
+</html>
