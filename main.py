@@ -55,3 +55,41 @@ def get_current():
     if row:
         return {"현재_인원": row[0], "상태": judge_status(row[0]), "업데이트_시간": row[1]}
     return {"message": "데이터 없음"}
+# 모든 기록 조회 페이지
+@app.get("/history")
+def get_history():
+    conn = sqlite3.connect("gym.db")
+    cursor = conn.cursor()
+    # 최신순으로 모든 기록 가져오기
+    cursor.execute("SELECT count, timestamp FROM gym_logs ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # 간단한 HTML 표로 만들기
+    html_content = """
+    <html>
+    <head>
+        <title>필짐 공릉점 기록</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body { font-family: sans-serif; text-align: center; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+            th { background-color: #f4f4f9; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+        </style>
+    </head>
+    <body>
+        <h2>📊 전체 혼잡도 기록</h2>
+        <table>
+            <tr><th>시간</th><th>인원수</th><th>상태</th></tr>
+    """
+    
+    for row in rows:
+        status = judge_status(row[0])
+        html_content += f"<tr><td>{row[1]}</td><td>{row[0]}명</td><td>{status}</td></tr>"
+    
+    html_content += "</table><br><a href='/'>입력 화면으로 돌아가기</a></body></html>"
+    
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html_content)
