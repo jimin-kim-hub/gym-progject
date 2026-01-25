@@ -93,3 +93,32 @@ def get_history():
     
     from fastapi.responses import HTMLResponse
     return HTMLResponse(content=html_content)
+# 카카오톡 챗봇 전용 응답 API
+@app.post("/kakao")
+async def kakao_bot():
+    conn = sqlite3.connect("gym.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT count FROM gym_logs ORDER BY id DESC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+
+    if row:
+        count = row[0]
+        status = judge_status(count)
+        msg = f"현재 필짐 공릉점 인원은 약 {count}명이며, [{status}] 상태입니다! 오늘도 득근하세요! 💪"
+    else:
+        msg = "아직 기록된 혼잡도 정보가 없습니다."
+
+    # 카카오톡이 요구하는 형식(JSON)으로 응답
+    return {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "simpleText": {
+                        "text": msg
+                    }
+                }
+            ]
+        }
+    }

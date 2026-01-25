@@ -4,65 +4,84 @@
     <title>필짐 공릉점 관리자</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 30px; background-color: #f4f4f9; color: #333; }
-        h2 { margin-bottom: 40px; }
-        .btn-group { display: flex; flex-direction: column; gap: 20px; align-items: center; }
+        body { font-family: 'Pretendard', sans-serif; text-align: center; padding: 20px; background-color: #f8f9fa; color: #333; }
+        .container { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); max-width: 450px; margin: 0 auto; }
         
-        button { 
-            width: 80%; max-width: 300px; padding: 25px; font-size: 20px; font-weight: bold;
-            border: none; border-radius: 15px; cursor: pointer; transition: transform 0.1s;
-        }
-        button:active { transform: scale(0.95); }
+        /* 기준표 스타일 */
+        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 14px; border-radius: 10px; overflow: hidden; border: 1px solid #eee; }
+        .info-table th { background: #eee; padding: 10px; }
+        .info-table td { padding: 10px; border-top: 1px solid #eee; }
+        .badge { padding: 3px 8px; border-radius: 5px; font-weight: bold; }
+        .low { background: #d4edda; color: #155724; }
+        .mid { background: #fff3cd; color: #856404; }
+        .high { background: #f8d7da; color: #721c24; }
 
-        .btn-low { background-color: #28a745; color: white; }
-        .btn-mid { background-color: #ffc107; color: #333; }
-        .btn-high { background-color: #dc3545; color: white; }
+        /* 버튼 그리드 스타일 */
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .count-btn { 
+            padding: 20px; font-size: 17px; font-weight: bold; border: none; border-radius: 12px; 
+            background: #f1f3f5; cursor: pointer; transition: 0.2s; color: #495057;
+        }
+        .count-btn:active { transform: scale(0.95); background: #e9ecef; }
         
-        #result-screen { display: none; margin-top: 50px; }
-        .success-icon { font-size: 50px; color: #28a745; margin-bottom: 20px; }
-        .reset-btn { margin-top: 30px; background: none; border: 1px solid #aaa; color: #666; font-size: 14px; padding: 10px; width: auto; }
+        #result-screen { display: none; padding: 40px 0; }
+        .success-icon { font-size: 60px; margin-bottom: 20px; }
+        .reset-btn { margin-top: 20px; background: none; border: 1px solid #adb5bd; color: #495057; padding: 10px 20px; border-radius: 8px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div id="main-screen">
-        <h2>🏋️ 현재 필짐 혼잡도는?</h2>
-        <div class="btn-group">
-            <button class="btn-low" onclick="sendCount(10)">🍀 여유로워요</button>
-            <button class="btn-mid" onclick="sendCount(25)">🙂 보통이에요</button>
-            <button class="btn-high" onclick="sendCount(40)">🔥 붐비네요</button>
+    <div class="container">
+        <div id="main-screen">
+            <h2 style="margin-bottom: 10px;">🏋️ 필짐 혼잡도 입력</h2>
+            
+            <table class="info-table">
+                <thead>
+                    <tr><th>구분</th><th>인원 기준</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><span class="badge low">여유</span></td><td>15명 이하</td></tr>
+                    <tr><td><span class="badge mid">보통</span></td><td>16명 ~ 30명</td></tr>
+                    <tr><td><span class="badge high">혼잡</span></td><td>31명 이상</td></tr>
+                </tbody>
+            </table>
+
+            <p style="font-size: 14px; color: #666; margin-bottom: 15px;">현재 인원을 선택해주세요</p>
+            
+            <div class="btn-grid">
+                <button class="count-btn" onclick="saveCount(5)">약 5명</button>
+                <button class="count-btn" onclick="saveCount(10)">약 10명</button>
+                <button class="count-btn" onclick="saveCount(15)">약 15명</button>
+                <button class="count-btn" onclick="saveCount(20)">약 20명</button>
+                <button class="count-btn" onclick="saveCount(25)">약 25명</button>
+                <button class="count-btn" onclick="saveCount(30)">약 30명</button>
+                <button class="count-btn" onclick="saveCount(35)">약 35명</button>
+                <button class="count-btn" onclick="saveCount(40)">약 40명</button>
+            </div>
+            
+            <a href="/history" style="font-size: 14px; color: #007bff; text-decoration: none;">📊 전체 기록 보기</a>
+        </div>
+
+        <div id="result-screen">
+            <div class="success-icon">✅</div>
+            <h2 style="margin-bottom: 10px;">저장 완료!</h2>
+            <p id="time-text" style="color: #888; font-size: 15px;"></p>
+            <button class="reset-btn" onclick="location.reload()">돌아가기</button>
         </div>
     </div>
 
-    <div id="result-screen">
-        <div class="success-icon">✅</div>
-        <h2 id="status-text">저장 완료되었습니다!</h2>
-        <p id="time-text" style="color: #888;"></p>
-        <button class="reset-btn" onclick="showMain()">다시 입력하기</button>
-    </div>
-
     <script>
-    async function sendCount(countValue) {
-        try {
-            const response = await fetch(`/update?count=${countValue}`);
-            const data = await response.json();
-            
-            // 화면 전환
-            document.getElementById('main-screen').style.display = 'none';
-            document.getElementById('result-screen').style.display = 'block';
-            
-            // [수정 포인트] 서버에서 '상태' 대신 다른 이름으로 올 수도 있으니 
-            // 아예 고정 문구로 깔끔하게 나오게 변경합니다.
-            document.getElementById('status-text').innerText = "필짐 공릉점 혼잡도 저장 완료!";
-            document.getElementById('time-text').innerText = data.시간 + " 기준";
-        } catch (error) {
-            alert("서버 연결에 실패했습니다.");
+        async function saveCount(val) {
+            try {
+                const response = await fetch(`/update?count=${val}`);
+                const data = await response.json();
+                
+                document.getElementById('main-screen').style.display = 'none';
+                document.getElementById('result-screen').style.display = 'block';
+                document.getElementById('time-text').innerText = data.시간 + " 기준";
+            } catch (error) {
+                alert("서버 연결에 실패했습니다.");
+            }
         }
-    }
-
-    function showMain() {
-        document.getElementById('main-screen').style.display = 'block';
-        document.getElementById('result-screen').style.display = 'none';
-    }
-</script>
+    </script>
 </body>
 </html>
