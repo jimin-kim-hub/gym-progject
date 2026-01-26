@@ -30,10 +30,10 @@ def judge_status(count: int):
     elif count <= 30: return "보통 (운동하기 적당해요. 🙂)"
     else: return "붐빔 (나중에 오시는 건 어떨까요? 😅)"
 
-# 3. 메인 페이지 및 기록 확인
+# 3. 메인 및 기록 확인 페이지
 @app.get("/")
 def read_root():
-    return {"status": "running", "message": "FeelGym Server is Online"}
+    return {"status": "running", "message": "FeelGym Server"}
 
 @app.get("/history", response_class=HTMLResponse)
 def get_history():
@@ -60,32 +60,25 @@ async def kakao_bot():
     row = cursor.fetchone()
     conn.close()
     
-    if row:
-        count = row[0]
-        msg = f"현재 필짐 공릉점 인원은 약 {count}명이며, [{judge_status(count)}] 상태입니다! 오늘도 득근하세요! 💪"
-    else:
-        msg = "아직 기록된 혼잡도 정보가 없습니다."
-    
+    msg = f"현재 필짐 인원은 약 {row[0]}명, [{judge_status(row[0])}] 상태입니다! 💪" if row else "기록이 없습니다."
     return {"version": "2.0", "template": {"outputs": [{"simpleText": {"text": msg}}]}}
 
-# --- 관리자 섹션 (보안 및 버튼식 UI) ---
+# --- 5. 관리자 섹션 (로그인 / 대시보드 / 업데이트 / 초기화) ---
 ADMIN_PASSWORD = "1234"
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_login_page():
     return """
-    <html>
-    <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+    <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
     <body style="text-align:center; padding-top:100px; font-family:sans-serif; background:#f0f2f5;">
-        <div style="display:inline-block; background:white; padding:40px; border-radius:20px; shadow:0 10px 25px rgba(0,0,0,0.1);">
+        <div style="display:inline-block; background:white; padding:40px; border-radius:20px; box-shadow:0 10px 25px rgba(0,0,0,0.1);">
             <h2>🔐 필짐 관리자</h2>
             <form action="/admin/dashboard" method="post">
                 <input type="password" name="password" placeholder="비밀번호" style="padding:15px; width:200px; border-radius:10px; border:1px solid #ddd;" required autofocus><br><br>
                 <button type="submit" style="padding:15px 30px; background:#007bff; color:white; border:none; border-radius:10px; cursor:pointer;">접속하기</button>
             </form>
         </div>
-    </body>
-    </html>
+    </body></html>
     """
 
 @app.post("/admin/dashboard", response_class=HTMLResponse)
@@ -93,29 +86,74 @@ async def admin_dashboard(password: str = Form(...)):
     if password != ADMIN_PASSWORD:
         return HTMLResponse("<script>alert('비밀번호가 틀렸습니다!'); history.back();</script>")
     
-    buttons_html = "".join([f'<button onclick="updateCount({c})" style="padding:20px; font-size:18px; font-weight:bold; border:none; border-radius:15px; background:#212529; color:white; cursor:pointer;">약 {c}명</button>' for c in [5, 10, 15, 20, 25, 30, 35, 40]])
+    counts = [5, 10, 15, 20, 25, 30, 35, 40]
+    buttons_html = "".join([f'<button class="count-btn" onclick="saveCount({c})">약 {c}명</button>' for c in counts])
 
     return f"""
+    <!DOCTYPE html>
     <html>
-    <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-    <body style="text-align:center; padding:20px; font-family:sans-serif; background:#f8f9fa;">
-        <div style="background:white; padding:30px 20px; border-radius:25px; max-width:500px; margin:auto; box-shadow:0 10px 30px rgba(0,0,0,0.05);">
-            <h2>🏋️‍♂️ 혼잡도 업데이트</h2>
-            <p style="background:#f1f3f5; padding:15px; border-radius:15px; font-size:14px;">🟢 ~20명: 여유 | 🟡 ~30명: 보통 | 🔴 31명~: 붐빔</p>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">{buttons_html}</div>
-            <br><a href="/history" style="color:#868e96; text-decoration:none; font-size:14px;">📊 전체 기록 보기</a>
+    <head>
+        <title>필짐 공릉점 관리자</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {{ font-family: sans-serif; text-align: center; padding: 20px; background-color: #f8f9fa; color: #333; }}
+            .container {{ background: white; padding: 25px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); max-width: 450px; margin: 0 auto; }}
+            .info-table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 14px; border-radius: 10px; overflow: hidden; border: 1px solid #eee; }}
+            .info-table th {{ background: #eee; padding: 10px; }}
+            .info-table td {{ padding: 10px; border-top: 1px solid #eee; }}
+            .badge {{ padding: 3px 8px; border-radius: 5px; font-weight: bold; }}
+            .low {{ background: #d4edda; color: #155724; }}
+            .mid {{ background: #fff3cd; color: #856404; }}
+            .high {{ background: #f8d7da; color: #721c24; }}
+            .btn-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }}
+            .count-btn {{ padding: 20px; font-size: 17px; font-weight: bold; border: none; border-radius: 12px; background: #f1f3f5; cursor: pointer; transition: 0.2s; color: #495057; }}
+            .count-btn:active {{ transform: scale(0.95); background: #e9ecef; }}
+            #result-screen {{ display: none; padding: 40px 0; }}
+            .success-icon {{ font-size: 60px; margin-bottom: 20px; }}
+            .back-btn {{ margin-top: 20px; background: none; border: 1px solid #adb5bd; color: #495057; padding: 10px 20px; border-radius: 8px; cursor: pointer; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div id="main-screen">
+                <h2 style="margin-bottom: 10px;">🏋️ 필짐 혼잡도 입력</h2>
+                <table class="info-table">
+                    <thead><tr><th>구분</th><th>인원 기준</th></tr></thead>
+                    <tbody>
+                        <tr><td><span class="badge low">여유</span></td><td>20명 이하</td></tr>
+                        <tr><td><span class="badge mid">보통</span></td><td>21명 ~ 30명</td></tr>
+                        <tr><td><span class="badge high">혼잡</span></td><td>31명 이상</td></tr>
+                    </tbody>
+                </table>
+                <div class="btn-grid">{buttons_html}</div>
+                <a href="/history" style="font-size: 14px; color: #007bff; text-decoration: none;">📊 전체 기록 보기</a>
+                
+                <form action="/admin/reset" method="post" onsubmit="return confirm('정말 모든 기록을 삭제하시겠습니까?');" style="margin-top:30px;">
+                    <input type="hidden" name="password" value="{ADMIN_PASSWORD}">
+                    <button type="submit" style="background:none; border:none; color:#dc3545; font-size:12px; cursor:pointer; text-decoration:underline;">데이터 초기화</button>
+                </form>
+            </div>
+            <div id="result-screen">
+                <div class="success-icon">✅</div>
+                <h2>저장 완료!</h2>
+                <p id="time-text" style="color: #888; font-size: 15px;"></p>
+                <button class="back-btn" onclick="location.reload()">돌아가기</button>
+            </div>
         </div>
         <script>
-            function updateCount(c) {{
-                if(confirm("현재 인원을 '약 " + c + "명'으로 업데이트할까요?")) {{
-                    fetch("/admin/quick-update?count=" + c, {{ method: "POST" }})
-                    .then(res => res.json())
-                    .then(data => alert("✅ 저장 완료! 챗봇에 즉시 반영되었습니다."));
+            async function saveCount(val) {{
+                try {{
+                    const response = await fetch(`/admin/quick-update?count=${{val}}`, {{ method: "POST" }});
+                    const data = await response.json();
+                    document.getElementById('main-screen').style.display = 'none';
+                    document.getElementById('result-screen').style.display = 'block';
+                    document.getElementById('time-text').innerText = "방금 전 업데이트 됨";
+                }} catch (error) {{
+                    alert("서비 연결에 실패했습니다.");
                 }}
             }}
         </script>
-    </body>
-    </html>
+    </body></html>
     """
 
 @app.post("/admin/quick-update")
@@ -127,3 +165,14 @@ async def quick_update(count: int):
     conn.commit()
     conn.close()
     return {"status": "success", "count": count}
+
+@app.post("/admin/reset")
+async def reset_history(password: str = Form(...)):
+    if password != ADMIN_PASSWORD:
+        return HTMLResponse("<script>alert('권한이 없습니다.'); history.back();</script>")
+    conn = sqlite3.connect("gym.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM gym_logs")
+    conn.commit()
+    conn.close()
+    return HTMLResponse("<script>alert('기록이 초기화되었습니다.'); location.href='/admin';</script>")
