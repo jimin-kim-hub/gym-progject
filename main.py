@@ -1,5 +1,5 @@
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import FileResponse,HTMLResponse  # HTMLResponse 추가
 import sqlite3
 from datetime import datetime, timedelta # 시간 조절 도구 추가
 
@@ -122,3 +122,53 @@ async def kakao_bot():
             ]
         }
     }
+# 1. 관리자 전용 비밀번호 설정 (원하시는 대로 바꾸세요)
+ADMIN_PASSWORD = "1234"
+
+# 2. 관리자 로그인 및 입력 페이지
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page():
+    # 트레이너가 접속하면 보게 될 화면입니다.
+    return """
+    <html>
+    <head>
+        <title>필짐 관리자 전용</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body { font-family: sans-serif; text-align: center; padding: 50px 20px; background-color: #f4f4f9; }
+            .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+            button { width: 100%; padding: 12px; background-color: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>🔐 필짐 관리자 전용</h2>
+            <p>비밀번호와 현재 인원을 입력하세요.</p>
+            <form action="/admin/update" method="post">
+                <input type="password" name="password" placeholder="비밀번호 4자리" required>
+                <input type="number" name="count" placeholder="현재 인원 (숫자만)" required>
+                <button type="submit">인원수 업데이트</button>
+            </form>
+            <br>
+            <a href="/history" style="color: #666; font-size: 14px;">기록 보기</a>
+        </div>
+    </body>
+    </html>
+    """
+
+# 3. 비밀번호 확인 후 데이터 저장 처리
+@app.post("/admin/update")
+async def admin_update(password: str = Form(...), count: int = Form(...)):
+    if password != ADMIN_PASSWORD:
+        return HTMLResponse(content="<script>alert('비밀번호가 틀렸습니다!'); history.back();</script>")
+    
+    # 비밀번호가 맞으면 기존 update 로직을 실행합니다.
+    kst_now = get_kst_now()
+    conn = sqlite3.connect("gym.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO gym_logs (count, timestamp) VALUES (?, ?)", (count, kst_now))
+    conn.commit()
+    conn.close()
+    
+    return HTMLResponse(content=f"<script>alert('{count}명으로 업데이트 되었습니다!'); location.href='/admin';</script>")
