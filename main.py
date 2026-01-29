@@ -1,27 +1,33 @@
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
-import sqlite3
+from sqlalchemy import create_engine, text, Column, Integer, String, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta
+import os
 
 app = FastAPI()
 
-# 1. 데이터베이스 초기화 (기록 저장용)
-def init_db():
-    conn = sqlite3.connect("gym.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS gym_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            count INTEGER,
-            timestamp DATETIME
-        )
-    """)
-    conn.commit()
-    conn.close()
+# --- 1. 데이터베이스 설정 (Supabase 연동) ---
+# 지민님이 완성하신 무적의 주소입니다.
+DATABASE_URL = "postgresql://postgres.ghnmnsaborthmiftdnsb:YY64RTzNQoUsoWik@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true"
 
-init_db()
+# SQLAlchemy 설정
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-# 2. 한국 시간 및 상태 판정 함수
+# 테이블 구조 정의 (기존 SQLite 구조와 동일하게)
+class GymLog(Base):
+    __tablename__ = "gym_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    count = Column(Integer)
+    timestamp = Column(String) # 기존 코드와 호환성을 위해 String으로 유지
+
+# DB 테이블 생성 (최초 1회 실행)
+Base.metadata.create_all(bind=engine)
+
+# --- 2. 유틸리티 함수 ---
 def get_kst_now():
     return (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -30,40 +36,37 @@ def judge_status(count: int):
     elif count <= 30: return "보통 (운동하기 적당해요. 🙂)"
     else: return "붐빔 (나중에 오시는 건 어떨까요? 😅)"
 
-# 3. 메인 및 기록 확인 페이지
+# --- 3. 메인 및 기록 확인 페이지 ---
 @app.get("/")
 def read_root():
-    return {"status": "running", "message": "FeelGym Server"}
+    return {"status": "running", "message": "FeelGym Server with Supabase"}
 
 @app.get("/history", response_class=HTMLResponse)
 def get_history():
-    conn = sqlite3.connect("gym.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT count, timestamp FROM gym_logs ORDER BY id DESC")
-    rows = cursor.fetchall()
-    conn.close()
+    db = SessionLocal()
+    # 최신순으로 기록 가져오기
+    logs = db.query(GymLog).order_by(GymLog.id.desc()).all()
+    db.close()
     
     html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head>"
-    html += "<body style='text-align:center; font-family:sans-serif;'><h2>📊 전체 혼잡도 기록</h2><table border='1' style='margin:auto; width:90%; border-collapse:collapse;'>"
+    html += "<body style='text-align:center; font-family:sans-serif;'><h2>📊 전체 혼잡도 기록 (Supabase)</h2><table border='1' style='margin:auto; width:90%; border-collapse:collapse;'>"
     html += "<tr style='background:#f4f4f9;'><th>시간</th><th>인원</th><th>상태</th></tr>"
-    for row in rows:
-        html += f"<tr><td>{row[1]}</td><td>{row[0]}명</td><td>{judge_status(row[0])}</td></tr>"
+    for log in logs:
+        html += f"<tr><td>{log.timestamp}</td><td>{log.count}명</td><td>{judge_status(log.count)}</td></tr>"
     html += "</table><br><a href='/admin'>관리자 페이지로</a></body></html>"
     return html
 
 # 4. 카카오톡 챗봇 응답 API
 @app.post("/kakao")
 async def kakao_bot():
-    conn = sqlite3.connect("gym.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT count FROM gym_logs ORDER BY id DESC LIMIT 1")
-    row = cursor.fetchone()
-    conn.close()
+    db = SessionLocal()
+    last_log = db.query(GymLog).order_by(GymLog.id.desc()).first()
+    db.close()
     
-    msg = f"현재 필짐 인원은 약 {row[0]}명, [{judge_status(row[0])}] 상태입니다! 💪" if row else "기록이 없습니다."
+    msg = f"현재 필짐 인원은 약 {last_log.count}명, [{judge_status(last_log.count)}] 상태입니다! 💪" if last_log else "기록이 없습니다."
     return {"version": "2.0", "template": {"outputs": [{"simpleText": {"text": msg}}]}}
 
-# --- 5. 관리자 섹션 (로그인 / 대시보드 / 업데이트 / 초기화) ---
+# --- 5. 관리자 섹션 ---
 ADMIN_PASSWORD = "1234"
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -72,7 +75,7 @@ async def admin_login_page():
     <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
     <body style="text-align:center; padding-top:100px; font-family:sans-serif; background:#f0f2f5;">
         <div style="display:inline-block; background:white; padding:40px; border-radius:20px; box-shadow:0 10px 25px rgba(0,0,0,0.1);">
-            <h2>🔐 필짐 관리자</h2>
+            <h2>🔐 필짐 관리자 (DB 연동형)</h2>
             <form action="/admin/dashboard" method="post">
                 <input type="password" name="password" placeholder="비밀번호" style="padding:15px; width:200px; border-radius:10px; border:1px solid #ddd;" required autofocus><br><br>
                 <button type="submit" style="padding:15px 30px; background:#007bff; color:white; border:none; border-radius:10px; cursor:pointer;">접속하기</button>
@@ -147,9 +150,9 @@ async def admin_dashboard(password: str = Form(...)):
                     const data = await response.json();
                     document.getElementById('main-screen').style.display = 'none';
                     document.getElementById('result-screen').style.display = 'block';
-                    document.getElementById('time-text').innerText = "방금 전 업데이트 됨";
+                    document.getElementById('time-text').innerText = "방금 전 Supabase에 저장됨";
                 }} catch (error) {{
-                    alert("서비 연결에 실패했습니다.");
+                    alert("서버 연결에 실패했습니다.");
                 }}
             }}
         </script>
@@ -159,20 +162,19 @@ async def admin_dashboard(password: str = Form(...)):
 @app.post("/admin/quick-update")
 async def quick_update(count: int):
     kst_now = get_kst_now()
-    conn = sqlite3.connect("gym.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO gym_logs (count, timestamp) VALUES (?, ?)", (count, kst_now))
-    conn.commit()
-    conn.close()
+    db = SessionLocal()
+    new_log = GymLog(count=count, timestamp=kst_now)
+    db.add(new_log)
+    db.commit()
+    db.close()
     return {"status": "success", "count": count}
 
 @app.post("/admin/reset")
 async def reset_history(password: str = Form(...)):
     if password != ADMIN_PASSWORD:
         return HTMLResponse("<script>alert('권한이 없습니다.'); history.back();</script>")
-    conn = sqlite3.connect("gym.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM gym_logs")
-    conn.commit()
-    conn.close()
+    db = SessionLocal()
+    db.execute(text("DELETE FROM gym_logs"))
+    db.commit()
+    db.close()
     return HTMLResponse("<script>alert('기록이 초기화되었습니다.'); location.href='/admin';</script>")
