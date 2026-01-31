@@ -8,7 +8,7 @@ import os
 
 app = FastAPI()
 
-# --- 1. 환경 설정 ---
+# --- 1. 환경 설정 (지점 추가/수정은 여기서!) ---
 GYM_CONFIG = {
     "헬스장1": {"pw": "1111"},
     "헬스장2": {"pw": "2222"},
@@ -32,16 +32,17 @@ Base.metadata.create_all(bind=engine)
 def get_kst_now():
     return (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M:%S")
 
-# --- 2. 메인 화면 (지점 선택) ---
+# --- 2. 메인 화면 (제목 수정 완료!) ---
 @app.get("/", response_class=HTMLResponse)
 def main_selection():
     buttons = "".join([
-        f'<button onclick="location.href=\'/admin/{name}\'" style="padding:20px; width:250px; margin:10px; font-size:18px; font-weight:bold; border-radius:15px; border:none; background:white; color:#333; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.05);">🏢 {name} 관리자</button><br>'
+        f'<button onclick="location.href=\'/admin/{name}\'" style="padding:20px; width:280px; margin:10px; font-size:18px; font-weight:bold; border-radius:15px; border:none; background:white; color:#333; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.05);">🏢 {name} 인원 등록</button><br>'
         for name in GYM_CONFIG.keys()
     ])
     return f"""
-    <html><body style="text-align:center; padding-top:80px; font-family:sans-serif; background:#f0f2f5;">
-        <h1>🏋️ 필짐 통합 관리 도구</h1>
+    <html><body style="text-align:center; padding-top:80px; font-family:sans-serif; background:#f0f2f5; color:#333;">
+        <h1 style="margin-bottom:10px;">📊 헬스장 실시간 인원 등록</h1>
+        <p style="color:#666; margin-bottom:40px;">등록할 지점을 선택해 주세요.</p>
         {buttons}
         <br><br><a href="/history" style="color:#007bff; text-decoration:none; font-size:14px;">📊 전체 통합 기록 보기</a>
     </body></html>
@@ -60,12 +61,12 @@ async def admin_login(gym_name: str):
                 <input type="password" name="password" placeholder="비밀번호" style="padding:15px; width:200px; border-radius:10px; border:1px solid #ddd;" required autofocus><br><br>
                 <button type="submit" style="padding:15px 30px; background:#007bff; color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold;">관리자 모드 시작</button>
             </form>
-            <br><a href="/" style="font-size:12px; color:#888;">지점 다시 선택하기</a>
+            <br><a href="/" style="font-size:12px; color:#888;">홈으로 돌아가기</a>
         </div>
     </body></html>
     """
 
-# --- 4. 지점별 대시보드 (복구 디자인 + 홈 버튼 추가) ---
+# --- 4. 지점별 대시보드 ---
 @app.post("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(gym_name: str = Form(...), password: str = Form(...)):
     if GYM_CONFIG.get(gym_name, {}).get("pw") != password:
@@ -78,7 +79,7 @@ async def admin_dashboard(gym_name: str = Form(...), password: str = Form(...)):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>{gym_name} 관리자</title>
+        <title>{gym_name} 인원 등록</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {{ font-family: sans-serif; text-align: center; padding: 20px; background-color: #f8f9fa; color: #333; }}
@@ -96,8 +97,7 @@ async def admin_dashboard(gym_name: str = Form(...), password: str = Form(...)):
             #result-screen {{ display: none; padding: 40px 0; }}
             .success-icon {{ font-size: 60px; margin-bottom: 20px; }}
             .back-btn {{ margin-top: 20px; background: none; border: 1px solid #adb5bd; color: #495057; padding: 10px 20px; border-radius: 8px; cursor: pointer; }}
-            .nav-link {{ display: block; margin-top: 15px; font-size: 14px; color: #007bff; text-decoration: none; }}
-            .reset-btn {{ margin-top: 25px; background: none; border: none; color: #dc3545; font-size: 12px; cursor: pointer; text-decoration: underline; }}
+            .nav-link {{ display: block; margin-top: 20px; font-size: 14px; color: #007bff; text-decoration: none; }}
         </style>
     </head>
     <body>
@@ -115,13 +115,14 @@ async def admin_dashboard(gym_name: str = Form(...), password: str = Form(...)):
                 <div class="btn-grid">{buttons_html}</div>
                 <a class="nav-link" href="/history?gym_name={gym_name}">📊 {gym_name} 기록 보기</a>
                 
-                <form action="/admin/reset" method="post" onsubmit="return confirm('정말 {gym_name}의 기록만 삭제하시겠습니까?');">
+                <form action="/admin/reset" method="post" onsubmit="return confirm('기록을 삭제하시겠습니까?');" style="margin-top:20px;">
                     <input type="hidden" name="gym_name" value="{gym_name}">
                     <input type="hidden" name="password" value="{password}">
-                    <button type="submit" class="reset-btn">지점 데이터 초기화</button>
+                    <button type="submit" style="background:none; border:none; color:#dc3545; font-size:12px; cursor:pointer; text-decoration:underline;">데이터 초기화</button>
                 </form>
                 
-                <a class="nav-link" href="/" style="color: #6c757d; margin-top: 20px;">🏠 홈으로 돌아가기 (지점 선택)</a>
+                <hr style="margin-top:20px; border:0; border-top:1px solid #eee;">
+                <a class="nav-link" href="/" style="color: #6c757d;">🏠 홈으로 (지점 선택)</a>
             </div>
             <div id="result-screen">
                 <div class="success-icon">✅</div>
@@ -137,39 +138,30 @@ async def admin_dashboard(gym_name: str = Form(...), password: str = Form(...)):
                         document.getElementById('main-screen').style.display = 'none';
                         document.getElementById('result-screen').style.display = 'block';
                     }}
-                }} catch (error) {{ alert("서버 연결 실패"); }}
+                }} catch (error) {{ alert("연결 실패"); }}
             }}
         </script>
     </body></html>
     """
 
-# --- 이하 데이터 처리 API 로직 (동일) ---
+# --- 이하 저장/조회 로직 동일 ---
 @app.post("/admin/update")
 async def update_count(gym_name: str, count: int):
-    db = SessionLocal()
-    try:
-        new_log = GymLog(gym_name=gym_name, count=count, timestamp=get_kst_now())
-        db.add(new_log)
-        db.commit()
-    finally: db.close()
+    db = SessionLocal(); new_log = GymLog(gym_name=gym_name, count=count, timestamp=get_kst_now())
+    db.add(new_log); db.commit(); db.close()
     return {"status": "success"}
 
 @app.post("/admin/reset")
 async def reset_history(gym_name: str = Form(...), password: str = Form(...)):
     if GYM_CONFIG.get(gym_name, {}).get("pw") != password: return "권한 없음"
-    db = SessionLocal()
-    try:
-        db.execute(text(f"DELETE FROM gym_logs WHERE gym_name = :name"), {"name": gym_name})
-        db.commit()
-    finally: db.close()
+    db = SessionLocal(); db.execute(text(f"DELETE FROM gym_logs WHERE gym_name = :name"), {{"name": gym_name}})
+    db.commit(); db.close()
     return HTMLResponse(f"<script>alert('{gym_name} 초기화 완료'); location.href='/';</script>")
 
 @app.get("/history", response_class=HTMLResponse)
 def get_history(gym_name: str = None):
-    db = SessionLocal()
-    query = db.query(GymLog)
+    db = SessionLocal(); query = db.query(GymLog)
     if gym_name: query = query.filter(GymLog.gym_name == gym_name)
-    logs = query.order_by(GymLog.id.desc()).limit(50).all()
-    db.close()
+    logs = query.order_by(GymLog.id.desc()).limit(50).all(); db.close()
     rows = "".join([f"<tr><td>{l.gym_name}</td><td>{l.timestamp}</td><td>{l.count}명</td></tr>" for l in logs])
     return f"<html><body style='text-align:center; padding:20px; font-family:sans-serif;'><h2>📊 기록</h2><table border='1' style='margin:auto; width:90%; border-collapse:collapse;'>{rows}</table><br><a href='/'>홈으로</a></body></html>"
