@@ -10,7 +10,8 @@ app = FastAPI()
 
 # --- 1. 데이터베이스 설정 (Supabase 연동) ---
 # 드라이버(+psycopg2)를 명시하고 에러를 유발한 옵션(?pgbouncer)을 제거했습니다.
-DATABASE_URL = "postgresql+psycopg2://postgres.ghnmnsaborthmiftdnsb:YY64RTzNQoUsoWik@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres"
+#DATABASE_URL = "postgresql+psycopg2://postgres.ghnmnsaborthmiftdnsb:YY64RTzNQoUsoWik@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # 엔진 및 세션 설정
 engine = create_engine(DATABASE_URL)
