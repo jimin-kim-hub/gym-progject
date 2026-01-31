@@ -8,181 +8,118 @@ import os
 
 app = FastAPI()
 
-# --- 1. 데이터베이스 설정 (Supabase 연동) ---
-# 드라이버(+psycopg2)를 명시하고 에러를 유발한 옵션(?pgbouncer)을 제거했습니다.
-#DATABASE_URL = "postgresql+psycopg2://postgres.ghnmnsaborthmiftdnsb:YY64RTzNQoUsoWik@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres"
-DATABASE_URL = os.getenv("DATABASE_URL")
+# --- 1. 환경 설정 (이름만 바꾸면 바로 적용됩니다!) ---
+GYM_CONFIG = {
+    "헬스장1": {"pw": "1111"},
+    "헬스장2": {"pw": "2222"},
+    "헬스장3": {"pw": "3333"}
+}
 
-# 엔진 및 세션 설정
+DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# 테이블 정의
+# 테이블 정의 (gym_name 추가)
 class GymLog(Base):
     __tablename__ = "gym_logs"
     id = Column(Integer, primary_key=True, index=True)
+    gym_name = Column(String)  # 어느 헬스장인지 저장
     count = Column(Integer)
     timestamp = Column(String)
 
-# 서버 시작 시 테이블 자동 생성
 Base.metadata.create_all(bind=engine)
 
-# --- 2. 유틸리티 함수 ---
+# --- 2. 유틸리티 ---
 def get_kst_now():
     return (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M:%S")
 
-def judge_status(count: int):
-    if count <= 20: return "여유 (쾌적해요! 🏃‍♂️)"
-    elif count <= 30: return "보통 (운동하기 적당해요. 🙂)"
-    else: return "붐빔 (나중에 오시는 건 어떨까요? 😅)"
-
-# --- 3. 메인 및 기록 확인 페이지 ---
-@app.get("/")
-def read_root():
-    return {"status": "running", "message": "FeelGym Server with Supabase - Fixed"}
-
-@app.get("/history", response_class=HTMLResponse)
-def get_history():
-    db = SessionLocal()
-    try:
-        logs = db.query(GymLog).order_by(GymLog.id.desc()).all()
-    finally:
-        db.close()
-    
-    html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head>"
-    html += "<body style='text-align:center; font-family:sans-serif;'><h2>📊 전체 혼잡도 기록</h2><table border='1' style='margin:auto; width:90%; border-collapse:collapse;'>"
-    html += "<tr style='background:#f4f4f9;'><th>시간</th><th>인원</th><th>상태</th></tr>"
-    for log in logs:
-        html += f"<tr><td>{log.timestamp}</td><td>{log.count}명</td><td>{judge_status(log.count)}</td></tr>"
-    html += "</table><br><a href='/admin'>관리자 페이지로</a></body></html>"
-    return html
-
-# 4. 카카오톡 챗봇 응답 API
-@app.post("/kakao")
-async def kakao_bot():
-    db = SessionLocal()
-    try:
-        last_log = db.query(GymLog).order_by(GymLog.id.desc()).first()
-    finally:
-        db.close()
-    
-    msg = f"현재 필짐 인원은 약 {last_log.count}명, [{judge_status(last_log.count)}] 상태입니다! 💪" if last_log else "기록이 없습니다."
-    return {"version": "2.0", "template": {"outputs": [{"simpleText": {"text": msg}}]}}
-
-# --- 5. 관리자 섹션 ---
-ADMIN_PASSWORD = "1234"
-
-@app.get("/admin", response_class=HTMLResponse)
-async def admin_login_page():
-    return """
-    <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-    <body style="text-align:center; padding-top:100px; font-family:sans-serif; background:#f0f2f5;">
-        <div style="display:inline-block; background:white; padding:40px; border-radius:20px; box-shadow:0 10px 25px rgba(0,0,0,0.1);">
-            <h2>🔐 필짐 관리자 (DB 연동형)</h2>
-            <form action="/admin/dashboard" method="post">
-                <input type="password" name="password" placeholder="비밀번호" style="padding:15px; width:200px; border-radius:10px; border:1px solid #ddd;" required autofocus><br><br>
-                <button type="submit" style="padding:15px 30px; background:#007bff; color:white; border:none; border-radius:10px; cursor:pointer;">접속하기</button>
-            </form>
-        </div>
+# --- 3. 메인 화면 (지점 선택 페이지) ---
+@app.get("/", response_class=HTMLResponse)
+def main_selection():
+    buttons = "".join([
+        f'<button onclick="location.href=\'/admin/{name}\'" style="padding:20px; width:200px; margin:10px; font-size:18px; border-radius:10px; border:none; background:#007bff; color:white; cursor:pointer;">{name} 관리</button><br>'
+        for name in GYM_CONFIG.keys()
+    ])
+    return f"""
+    <html><body style="text-align:center; padding-top:50px; font-family:sans-serif; background:#f0f2f5;">
+        <h2>🏋️ 필짐 통합 관리 시스템</h2>
+        <p>관리할 헬스장을 선택해주세요.</p>
+        {buttons}
+        <br><a href="/history" style="color:#888; text-decoration:none;">전체 기록 보기</a>
     </body></html>
     """
 
+# --- 4. 지점별 로그인 페이지 ---
+@app.get("/admin/{gym_name}", response_class=HTMLResponse)
+async def admin_login(gym_name: str):
+    if gym_name not in GYM_CONFIG:
+        return "존재하지 않는 지점입니다."
+    return f"""
+    <html><body style="text-align:center; padding-top:100px; font-family:sans-serif;">
+        <h2>🔐 {gym_name} 로그인</h2>
+        <form action="/admin/dashboard" method="post">
+            <input type="hidden" name="gym_name" value="{gym_name}">
+            <input type="password" name="password" placeholder="비밀번호" style="padding:15px; border-radius:10px; border:1px solid #ddd;" required autofocus><br><br>
+            <button type="submit" style="padding:15px 30px; background:#28a745; color:white; border:none; border-radius:10px;">접속</button>
+        </form>
+    </body></html>
+    """
+
+# --- 5. 지점별 대시보드 (입력 화면) ---
 @app.post("/admin/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(password: str = Form(...)):
-    if password != ADMIN_PASSWORD:
-        return HTMLResponse("<script>alert('비밀번호가 틀렸습니다!'); history.back();</script>")
+async def admin_dashboard(gym_name: str = Form(...), password: str = Form(...)):
+    if GYM_CONFIG.get(gym_name, {}).get("pw") != password:
+        return "<script>alert('비밀번호가 틀렸습니다!'); history.back();</script>"
     
     counts = [5, 10, 15, 20, 25, 30, 35, 40]
-    buttons_html = "".join([f'<button class="count-btn" onclick="saveCount({c})">약 {c}명</button>' for c in counts])
+    btn_html = "".join([f'<button onclick="saveCount(\'{gym_name}\', {c})" style="padding:20px; font-size:18px; border-radius:10px; border:none; background:#f1f3f5; cursor:pointer;">{c}명</button>' for c in counts])
 
     return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>필짐 공릉점 관리자</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body {{ font-family: sans-serif; text-align: center; padding: 20px; background-color: #f8f9fa; color: #333; }}
-            .container {{ background: white; padding: 25px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); max-width: 450px; margin: 0 auto; }}
-            .info-table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 14px; border-radius: 10px; overflow: hidden; border: 1px solid #eee; }}
-            .info-table th {{ background: #eee; padding: 10px; }}
-            .info-table td {{ padding: 10px; border-top: 1px solid #eee; }}
-            .badge {{ padding: 3px 8px; border-radius: 5px; font-weight: bold; }}
-            .low {{ background: #d4edda; color: #155724; }}
-            .mid {{ background: #fff3cd; color: #856404; }}
-            .high {{ background: #f8d7da; color: #721c24; }}
-            .btn-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }}
-            .count-btn {{ padding: 20px; font-size: 17px; font-weight: bold; border: none; border-radius: 12px; background: #f1f3f5; cursor: pointer; transition: 0.2s; color: #495057; }}
-            .count-btn:active {{ transform: scale(0.95); background: #e9ecef; }}
-            #result-screen {{ display: none; padding: 40px 0; }}
-            .success-icon {{ font-size: 60px; margin-bottom: 20px; }}
-            .back-btn {{ margin-top: 20px; background: none; border: 1px solid #adb5bd; color: #495057; padding: 10px 20px; border-radius: 8px; cursor: pointer; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div id="main-screen">
-                <h2 style="margin-bottom: 10px;">🏋️ 필짐 혼잡도 입력</h2>
-                <table class="info-table">
-                    <thead><tr><th>구분</th><th>인원 기준</th></tr></thead>
-                    <tbody>
-                        <tr><td><span class="badge low">여유</span></td><td>20명 이하</td></tr>
-                        <tr><td><span class="badge mid">보통</span></td><td>21명 ~ 30명</td></tr>
-                        <tr><td><span class="badge high">혼잡</span></td><td>31명 이상</td></tr>
-                    </tbody>
-                </table>
-                <div class="btn-grid">{buttons_html}</div>
-                <a href="/history" style="font-size: 14px; color: #007bff; text-decoration: none;">📊 전체 기록 보기</a>
-                
-                <form action="/admin/reset" method="post" onsubmit="return confirm('정말 모든 기록을 삭제하시겠습니까?');" style="margin-top:30px;">
-                    <input type="hidden" name="password" value="{ADMIN_PASSWORD}">
-                    <button type="submit" style="background:none; border:none; color:#dc3545; font-size:12px; cursor:pointer; text-decoration:underline;">데이터 초기화</button>
-                </form>
-            </div>
-            <div id="result-screen">
-                <div class="success-icon">✅</div>
-                <h2>저장 완료!</h2>
-                <p id="time-text" style="color: #888; font-size: 15px;"></p>
-                <button class="back-btn" onclick="location.reload()">돌아가기</button>
-            </div>
-        </div>
+    <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+    <body style="text-align:center; font-family:sans-serif; padding:20px;">
+        <h2>🏢 {gym_name} 혼잡도 입력</h2>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">{btn_html}</div>
         <script>
-            async function saveCount(val) {{
-                try {{
-                    const response = await fetch(`/admin/quick-update?count=${{val}}`, {{ method: "POST" }});
-                    const data = await response.json();
-                    document.getElementById('main-screen').style.display = 'none';
-                    document.getElementById('result-screen').style.display = 'block';
-                    document.getElementById('time-text').innerText = "방금 전 Supabase에 저장됨";
-                }} catch (error) {{
-                    alert("서버 연결에 실패했습니다.");
-                }}
+            async function saveCount(name, val) {{
+                await fetch(`/admin/update?gym_name=${{name}}&count=${{val}}`, {{ method: 'POST' }});
+                alert(name + ' ' + val + '명 저장 완료!');
+                location.href = '/';
             }}
         </script>
     </body></html>
     """
 
-@app.post("/admin/quick-update")
-async def quick_update(count: int):
-    kst_now = get_kst_now()
+# --- 6. 데이터 저장 API ---
+@app.post("/admin/update")
+async def update_count(gym_name: str, count: int):
     db = SessionLocal()
     try:
-        new_log = GymLog(count=count, timestamp=kst_now)
+        new_log = GymLog(gym_name=gym_name, count=count, timestamp=get_kst_now())
         db.add(new_log)
         db.commit()
     finally:
         db.close()
-    return {"status": "success", "count": count}
+    return {"status": "success"}
 
-@app.post("/admin/reset")
-async def reset_history(password: str = Form(...)):
-    if password != ADMIN_PASSWORD:
-        return HTMLResponse("<script>alert('권한이 없습니다.'); history.back();</script>")
+# --- 7. 조회 페이지 (지점별 필터링) ---
+@app.get("/history", response_class=HTMLResponse)
+def get_history(gym_name: str = None):
     db = SessionLocal()
-    try:
-        db.execute(text("DELETE FROM gym_logs"))
-        db.commit()
-    finally:
-        db.close()
-    return HTMLResponse("<script>alert('기록이 초기화되었습니다.'); location.href='/admin';</script>")
+    query = db.query(GymLog)
+    if gym_name:
+        query = query.filter(GymLog.gym_name == gym_name)
+    logs = query.order_by(GymLog.id.desc()).limit(50).all()
+    db.close()
+    
+    rows = "".join([f"<tr><td>{l.gym_name}</td><td>{l.timestamp}</td><td>{l.count}명</td></tr>" for l in logs])
+    return f"""
+    <html><body style="text-align:center; font-family:sans-serif;">
+        <h2>📊 데이터 기록</h2>
+        <table border="1" style="margin:auto; width:90%; border-collapse:collapse;">
+            <tr style="background:#eee;"><th>지점</th><th>시간</th><th>인원</th></tr>
+            {rows}
+        </table><br>
+        <a href="/">홈으로 돌아가기</a>
+    </body></html>
+    """

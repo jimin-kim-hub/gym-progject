@@ -83,5 +83,9 @@
             }
         }
     </script>
+    <form action="/admin/reset" method="post" onsubmit="return confirm('정말 모든 기록을 삭제하시겠습니까?');" style="margin-top:20px;">
+    <input type="hidden" name="password" value="1234">
+    <button type="submit" style="background:#dc3545; font-size:14px; padding:10px;">🗑️ 전체 기록 초기화</button>
+</form>
 </body>
 </html>
