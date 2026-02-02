@@ -165,3 +165,29 @@ def get_history(gym_name: str = None):
     logs = query.order_by(GymLog.id.desc()).limit(50).all(); db.close()
     rows = "".join([f"<tr><td>{l.gym_name}</td><td>{l.timestamp}</td><td>{l.count}명</td></tr>" for l in logs])
     return f"<html><body style='text-align:center; padding:20px; font-family:sans-serif;'><h2>📊 기록</h2><table border='1' style='margin:auto; width:90%; border-collapse:collapse;'>{rows}</table><br><a href='/'>홈으로</a></body></html>"
+
+# --- 카카오 챗봇 전용 응답 API (지점별 구분 로직 포함) ---
+@app.post("/kakao")
+async def kakao_bot(request: Request):
+    # 카카오 설정창 URL 뒤에 붙인 ?gym_name=헬스장1 정보를 읽어옵니다.
+    params = request.query_params
+    gym_name = params.get("gym_name", "헬스장1") # 기본값은 헬스장1
+    
+    db = SessionLocal()
+    try:
+        # 데이터베이스에서 요청받은 '해당 지점'의 가장 최신 기록만 가져옵니다.
+        last_log = db.query(GymLog).filter(GymLog.gym_name == gym_name).order_by(GymLog.id.desc()).first()
+    finally:
+        db.close()
+    
+    if last_log:
+        msg = f"현재 [{last_log.gym_name}] 이용 인원은 약 {last_log.count}명입니다! 💪"
+    else:
+        msg = f"[{gym_name}]의 등록된 인원 정보가 없습니다."
+        
+    return {
+        "version": "2.0",
+        "template": {
+            "outputs": [{"simpleText": {"text": msg}}]
+        }
+    }
