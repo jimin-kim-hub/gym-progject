@@ -159,12 +159,44 @@ async def reset_history(gym_name: str = Form(...), password: str = Form(...)):
     return HTMLResponse(f"<script>alert('{gym_name} 초기화 완료'); location.href='/';</script>")
 
 @app.get("/history", response_class=HTMLResponse)
-def get_history(gym_name: str = None):
-    db = SessionLocal(); query = db.query(GymLog)
-    if gym_name: query = query.filter(GymLog.gym_name == gym_name)
-    logs = query.order_by(GymLog.id.desc()).limit(50).all(); db.close()
+def get_history(gym_name: str = None, password: str = None):
+    # 1. 전체 기록 보기 클릭 시(gym_name이 없을 때) 비밀번호 체크
+    if not gym_name:
+        if password != "1679":
+            return """
+            <script>
+                var pw = prompt("관리자 비밀번호를 입력하세요.");
+                if(pw) {
+                    location.href = "/history?password=" + pw;
+                } else {
+                    location.href = "/";
+                }
+            </script>
+            """
+
+    # 2. 데이터 조회 로직
+    db = SessionLocal()
+    query = db.query(GymLog)
+    
+    if gym_name:
+        query = query.filter(GymLog.gym_name == gym_name)
+    
+    logs = query.order_by(GymLog.id.desc()).limit(50).all()
+    db.close()
+    
     rows = "".join([f"<tr><td>{l.gym_name}</td><td>{l.timestamp}</td><td>{l.count}명</td></tr>" for l in logs])
-    return f"<html><body style='text-align:center; padding:20px; font-family:sans-serif;'><h2>📊 기록</h2><table border='1' style='margin:auto; width:90%; border-collapse:collapse;'>{rows}</table><br><a href='/'>홈으로</a></body></html>"
+    title = f"📊 {gym_name} 기록" if gym_name else "📊 전체 통합 기록"
+    
+    return f"""
+    <html><body style="text-align:center; font-family:sans-serif; padding:20px; background:#f8f9fa;">
+        <h2>{title}</h2>
+        <table border="1" style="margin:auto; width:90%; border-collapse:collapse; background:white; border:1px solid #eee;">
+            <tr style="background:#eee;"><th>지점</th><th>시간</th><th>인원</th></tr>
+            {rows}
+        </table><br>
+        <button onclick="location.href='/'" style="padding:10px 20px; border-radius:5px; border:1px solid #ccc; cursor:pointer;">홈으로</button>
+    </body></html>
+    """
 
 # --- 카카오 챗봇 전용 응답 API (지점별 구분 로직 포함) ---
 @app.post("/kakao")
